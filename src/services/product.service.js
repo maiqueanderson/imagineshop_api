@@ -13,7 +13,7 @@ export class ProductService {
     return await ProductModel.find({});
   }
   
-  async find(id) {
+  async findById(id) {
     return await ProductModel.findById(new ObjectId(id));
   }
 

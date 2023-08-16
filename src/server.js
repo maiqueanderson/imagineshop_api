@@ -4,33 +4,37 @@ import multer from 'multer';
 import { extname } from 'path';
 import crypto from 'crypto';
 import jwt  from 'jsonwebtoken';
-import { ProductService } from './services/product.service.js';
+import cors from 'cors';
 
+import { ProductService } from './services/product.service.js';
 import { UserService } from './services/user-service.js';
 import { authMiddleware } from './middlewares/authMiddleware.js';
 
 //aqui está a configuração para que o express rode
 const app = express();
-const port = 3000;
+const port = 3333;
 
 //aqui é para comfigurar o multer, um middlewere para subir imagens no banco de dados
 const storageConfig = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/');
   },
-  filename: (req, file, cb) =>{
-    //aqui é para gerar um id único em hexadecimal para ser usado como nome da imagem usando o CRYPTO 
+  filename: (req, file, cb) => {
     const newFilename = crypto.randomBytes(32).toString('hex');
     const filenameExtension = extname(file.originalname);
     cb(null, `${newFilename}${filenameExtension}`);
   }
 });
 
-const uploadMiddleware = multer({storage: storageConfig});
+const uploadMiddleware = multer({ storage: storageConfig });
+
+app.use(cors({ origin: '*' }));
 
 //esssa configuração é para que o código possa aceitar arquivos .json
 app.use(express.json());
-app.use(express.urlencoded({extended: true}));
+app.use(express.urlencoded({ extended: true}));
+//essa configuração é para poder acessar os arquivos dentro da pasta uploads, no caso as imagens
+app.use('/uploads', express.static('uploads'));
 
 //esse é o retorno ao acessar o https://localhost:3000
 app.get('/', async (req, res) => {
@@ -38,9 +42,21 @@ app.get('/', async (req, res) => {
 
 });
 
-app.post('/products', uploadMiddleware.single('image'), async (req, res) =>{
+app.get('/products', async (req, res) => {
+  const productService = new ProductService();
+  const products = await productService.findAll();
+  return res.status(200).json(products);
+});
 
-  const {name, description, price, summary, stock, fileName} = req.body;
+app.get('/products/:id', async (req, res) => {
+  const id = req.params.id;
+  const productService = new ProductService();
+  const product = await productService.findById(id);
+  return res.status(200).json(product);
+});
+
+app.post('/products', authMiddleware, uploadMiddleware.single('image'), async (req, res) => {
+  const { name, description, price, summary, stock } = req.body;
   const productService = new ProductService();
   const product = {
     name,
@@ -51,13 +67,14 @@ app.post('/products', uploadMiddleware.single('image'), async (req, res) =>{
     fileName: req.file.filename
   };
   await productService.add(product);
-  return res.status(201).json({message: 'sucess'});
-} );
+  return res.status(201).json({ message: 'success' });
+});
 
-app.get('/products', async (req, res) =>{
+app.post('/products/sell', authMiddleware, async (req, res) => {
+  const { productIds } = req.body;
   const productService = new ProductService();
-  const products = await productService.findAll();
-  return res.status(200).json(products);
+  await productService.sell(productIds);
+  return res.status(201).json({ message: 'success' });
 });
 
 // aqui vai ser para criar novos usuarios 
@@ -99,7 +116,7 @@ app.get('/users', async (req, res) =>{
 app.get('/users/:id', authMiddleware, async (req, res) =>{
     const id = req.params.id;
     const userServices = new UserService();
-    const user = await userServices.find(id);
+    const user = await userServices.findById(id);
     if(user){
         return res.status(200).json(user);
        
